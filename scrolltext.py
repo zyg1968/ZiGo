@@ -66,7 +66,7 @@ class ScrollText(Text):
                 f.write(txt)
 
     def get_values(self, s):
-        filtstr= r"\s*([A-Z]\d{1,2})\s\->\s+(\d+)\s*\(V:\s([\d\.]+)\%\)\s\(N:\s*[\d\.]+\%\)\sPV:\s(.+)\n"   #"(Playouts: \d+, Win: ([\d\.]+)\%, PV: ([A-Z]\d{1,2})[\s\n])"|
+        filtstr= r"\s*([A-Z]\d{1,2})\s\->\s+(\d+)\s*\(V:\s*([\d\.]+)\%\)\s\(N:\s*[\d\.]+\%\)\sPV:\s(.+)\n"   #"(Playouts: \d+, Win: ([\d\.]+)\%, PV: ([A-Z]\d{1,2})[\s\n])"|
         m = re.match(filtstr, s)
         fs1=r"all visits count: (\d+)\n"
         m1 = re.match(fs1, s)

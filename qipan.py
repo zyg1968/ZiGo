@@ -1,23 +1,21 @@
 ﻿import threading
 import time
-import queue
 import numpy as np
 from tkinter import *
 from scrolltext import ScrollText
 from PIL import Image, ImageTk
-import utils
 import go
 import board
 import sys
 import tkinter.filedialog
 import sgfparser
-import selfplay
 import main
 import config
 import os
 import subprocess
-import policy
 import intergtp
+import dataset
+import dbhash
 
 def get_process_count(proname):
     p = os.popen('tasklist /FI "IMAGENAME eq %s"' % (proname))
@@ -25,19 +23,20 @@ def get_process_count(proname):
 
 
 class QiPan(object):
-    def __init__(self, name, root, bj, bs, ws, hqh, bqh, last, hdpi, hpx):
+    def __init__(self, name, root, bj, bs, ws, hqh, bqh, last):
         # threading.Thread.__init__(self)
         self.name = name
         # self.queue=msgqueue
         self.root = root
-        self.bjimg = bj
-        self.blackstone = bs
-        self.whitestone = ws
-        self.hqh = hqh
-        self.bqh = bqh
-        self.last = last
-        self.hdpi = hdpi
-        self.hpx = hpx
+        self.img1 = bj
+        self.img2 = bs
+        self.img3 = ws
+        self.img4 = hqh
+        self.img5 = bqh
+        self.img6 = last
+        self.screen_width = root.winfo_screenwidth()
+        self.screen_height = root.winfo_screenheight()
+        self.height = self.screen_height
         self.board = None
         self.clicked = None
         self.message = None
@@ -49,30 +48,75 @@ class QiPan(object):
         self.heatmap_texts=[]
         self.var_name1 = StringVar()
         self.var_name2 = StringVar()
-        self.initboard()
-        self.drawboard()
-        sys.stdout = self.gtpinfo
-        # sys.stdin = self.gtpinfo
-        sys.stderr = self.info
         self.current_stones = np.zeros([go.N, go.N], dtype=np.int8)
         self.step = 0
+        self.change_board = None
+        self.change_step = False
         self.analyser = None
         self.pause_analyse = True
+        self.canvas = None
+        self.blackimg = None
+        self.whiteimg = None
+        self.hqh = None
+        self.bqh = None
+        self.initboard()
+        self.resize(0,0,self.screen_width, self.screen_height)
+        #self.resize(0,0,self.screen_width, self.screen_height)
+        sys.stdout = self.gtpinfo
+        sys.stderr = self.info
+        # sys.stdin = self.gtpinfo
+
+    def on_resize(self,event):
+        #self.width = event.width
+        self.height = event.height
+        # resize the canvas 
+        minwh = event.height
+        if abs(event.width-event.height)>10:
+            minwh = min(event.width, event.height)
+            self.canvas.config(width=minwh, height=minwh)
+            return
+        self.canvas_resize(event.x, event.y, minwh, minwh)
+
+    def resize(self, left, top, width, height):
+        self.root.geometry('%dx%d+%d+%d' % (width, height, left, top))
+
+    def canvas_resize(self, left, top, width, height):
+        if self.canvas:
+            self.canvas.delete(ALL)
+        self.current_stones=np.zeros([go.N, go.N], dtype=np.int8)
+        self.height = height
+        #self.current_stones = np.zeros([go.N, go.N], dtype=np.int8)
+        #self.board = None
+        hpad = 0
+        self.linespace = int((self.height-hpad) / (go.N+1))
+        self.xs = int(self.linespace * 1)
+        self.ys = int(self.linespace * 1)
+        img=self.img1.resize((int(self.height), int(self.height)), Image.ANTIALIAS)
+        self.bjimg=ImageTk.PhotoImage(img)
+        img=self.img2.resize((int(self.linespace*0.95), int(self.linespace*0.95)), Image.ANTIALIAS)
+        self.blackstone = ImageTk.PhotoImage(img)
+        img=self.img3.resize((int(self.linespace*0.95), int(self.linespace*0.95)), Image.ANTIALIAS)
+        self.whitestone = ImageTk.PhotoImage(img)
+        img=self.img4.resize((int(self.height*0.15), int(self.height*0.15)), Image.ANTIALIAS)
+        self.hqh = ImageTk.PhotoImage(img)
+        if self.blackimg:
+            self.blackimg.config(image = self.hqh)
+        img=self.img5.resize((int(self.height*0.15), int(self.height*0.15)), Image.ANTIALIAS)
+        self.bqh = ImageTk.PhotoImage(img)
+        if self.whiteimg:
+            self.whiteimg.config(image = self.bqh)
+        img=self.img6.resize((int(self.linespace*0.34), int(self.linespace*0.34)), Image.ANTIALIAS)
+        self.last = ImageTk.PhotoImage(img)
+        self.drawboard()
+        #self.canvas.addtag_all("all")
 
     def initboard(self):
-        hpad = 80
-        self.linespace = int((self.hpx-hpad) / (go.N+1.6))
-        self.xs = int(self.linespace * 0.8)
-        self.ys = int(self.linespace * 0.8)
-        font = ("宋体", 10)
-        self.canvas = Canvas(self.root, bg='gray', width=self.xs * 2 + (go.N - 1) * self.linespace,
-                             height=self.ys * 2 + (go.N - 1) * self.linespace)
-        self.canvas.bind("<Button-1>", self.on_click)
-        self.canvas.bind("<Button-3>", self.on_undo)
+        font = ("宋体", 10) #scalecanvas.Scale
+        self.canvas = Canvas(self.root, bg='gray', width=self.height, height=self.height)
         self.stones = np.array([([None] * go.N) for _ in (range(go.N))])
         self.steptexts = {}  #, log="/logs/info.log", log="/logs/important.log"
-        self.info = ScrollText(self, self.root, width=75, font=font, padx=int(self.hdpi * 0.004), pady=int(self.hpx * 0.002))
-        self.gtpinfo = ScrollText(self, self.root, width=75, font=font, padx=int(self.hdpi * 0.004), pady=int(self.hpx * 0.002))
+        self.info = ScrollText(self, self.root, width=75, font=font, padx=int(self.height * 0.004), pady=int(self.height * 0.002))
+        self.gtpinfo = ScrollText(self, self.root, width=75, font=font, padx=int(self.height * 0.004), pady=int(self.height * 0.002))
         self.cmd = Entry(self.root, width=75, font=font)
         self.status = Label(self.root, text='盘面状态：', font=font, anchor=W)
         self.blackimg = Label(self.root, anchor=CENTER, image=self.hqh)
@@ -84,12 +128,12 @@ class QiPan(object):
         self.player2_eat = Label(self.root, width=16, text='eat2', font=font, anchor=CENTER)
         self.player2_winr= Label(self.root, width=16, text='胜率：', font=font, anchor=CENTER)
         cmdlabel = Label(self.root, width=16, text='命令行：', font=font, anchor=E)
-        klb = Frame(self.root, height=int(self.hpx * 0.02))
+        klb = Frame(self.root, height=int(self.height * 0.02))
         
         # grid
-        padx = int(self.hpx * 0.004)
-        pady = int(self.hpx * 0.002)
-        padyb = self.hpx*0.006
+        padx = int(self.height * 0.004)
+        pady = int(self.height * 0.002)
+        padyb = self.height*0.006
         self.canvas.grid(row=0, column=0, rowspan=9, sticky=NSEW)
         self.blackimg.grid(row=0, column=1, stick=EW, padx=padx, pady=pady)
         self.player1_name.grid(row=1, column=1, stick=N, padx=padx, pady=pady)
@@ -105,18 +149,20 @@ class QiPan(object):
         self.status.grid(row=9, column=0, sticky=EW, padx=padx, pady=padyb)
         cmdlabel.grid(row=9, column=1, sticky=EW, padx=padx, pady=padyb)
         self.cmd.grid(row=9, column=2, sticky=EW, padx=padx, pady=padyb)
+        #self.root.columnconfigure(0, weight=1)
         self.root.columnconfigure(2, weight=1)
-        self.root.rowconfigure(4, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        #self.root.rowconfigure(4, weight=1)
 
         self.build_menu()
         self.scores = []
         self.last_img = None
         self.last_text = None
-        self.root.bind('<Next>', self.on_event)
-        self.root.bind('<Prior>', self.on_event)
-        self.root.bind('<Left>', self.on_event)
-        self.root.bind('<Right>', self.on_event)
-        self.root.bind('<space>', self.on_event)
+        self.root.bind('<Key>', self.on_key)
+        self.canvas.bind("<Button-1>", self.on_click)
+        self.canvas.bind("<Button-3>", self.on_undo)
+        self.canvas.bind('<Control-Button-1>', self.on_ctl_click)
+        self.canvas.bind("<Configure>", self.on_resize)
 
     def drawboard(self):
         font = ("宋体", 12)
@@ -125,9 +171,9 @@ class QiPan(object):
         self.canvas.create_image(int(self.bjimg.width() / 2.0),
                                  int(self.bjimg.height() / 2.0), image=self.bjimg)
         for i in range(go.N):
-            self.canvas.create_text(i * self.linespace + self.xs, int(self.linespace*0.2),
+            self.canvas.create_text(i * self.linespace + self.xs, int(self.linespace*0.3),
                                     font=font, text=go.COLLUM_STR[i])
-            self.canvas.create_text(i * self.linespace + self.xs, self.ys + int((go.N-0.4) * self.linespace),
+            self.canvas.create_text(i * self.linespace + self.xs, self.ys + int((go.N-0.3) * self.linespace),
                                     font=font, text=go.COLLUM_STR[i])
             self.canvas.create_line(i * self.linespace + self.xs, self.ys,
                                     i * self.linespace + self.xs, (go.N - 1) * self.linespace + self.ys, width=self.linespace*0.01)
@@ -140,9 +186,9 @@ class QiPan(object):
                                         (i + 0.06) * self.linespace + self.xs,
                                         (go.N - 0.92) * self.linespace + self.ys , width=self.linespace*0.04)
         for j in range(go.N):
-            self.canvas.create_text(int(self.linespace*0.2), self.ys + j * self.linespace,
+            self.canvas.create_text(int(self.linespace*0.3), self.ys + j * self.linespace,
                                     font=font, text=str(go.N - j))
-            self.canvas.create_text(self.xs + (go.N - 0.4) * self.linespace , self.ys + j * self.linespace,
+            self.canvas.create_text(self.xs + (go.N - 0.3) * self.linespace , self.ys + j * self.linespace,
                                     font=font, text=str(go.N - j))
             self.canvas.create_line(self.xs, j * self.linespace + self.ys,
                                     (go.N - 1) * self.linespace + self.xs, j * self.linespace + self.ys, width=self.linespace*0.01)
@@ -169,7 +215,7 @@ class QiPan(object):
         # 在顶级菜单实例下创建子菜单实例, 去掉虚线tearoff=0
         fmenu = Menu(menubar, font=font, tearoff=0)
         # 为每个子菜单实例添加菜单项
-        for lbl, cmd in zip(['打开', '保存'], [self.open, None]):
+        for lbl, cmd in zip(['打开', '保存'], [self.open, self.save]):
             fmenu.add_command(label=lbl, command=cmd)
         # 给子菜单添加分割线
         fmenu.add_separator()
@@ -185,8 +231,8 @@ class QiPan(object):
         fmenu.add_command(label='退出', command=quit)
 
         funcmenu = Menu(menubar, font=font, tearoff=0)
-        for lbl, cmd in zip(['对战', '自我学习', '棋谱训练', '训练数据'],
-                            [self.play, self.selftrain, self.train, self.preprocess]):
+        for lbl, cmd in zip(['对战', '数据', '训练', '获取'],
+                            [self.play, self.get_traindata, self.train, self.get_board]):
             funcmenu.add_command(label=lbl, command=cmd)
         funcmenu.add_separator()
         funcmenu.add_command(label='停止训练', command=self.stoptrain)
@@ -197,7 +243,7 @@ class QiPan(object):
             vmenu.add_command(label=lbl, command=cmd)
         vmenu.add_separator()
         for lbl, cmd in zip(['悔棋', '不走', '认输', '重新开始'],
-                            [self.undo, self.move_pass, self.resign, self.start]):
+                            [self.undo, self.move_pass, self.resign, self.restart]):
             vmenu.add_command(label=lbl, command=cmd)
 
         emenu = Menu(menubar, font=font, tearoff=0)
@@ -252,6 +298,12 @@ class QiPan(object):
         # 菜单实例应用到大窗口中
         self.root['menu'] = menubar
 
+    def get_label(self):
+        ml=int(go.N/2)
+        return [go.N/go.MAX_BOARD, self.linespace/self.screen_height, 
+                (ml * self.linespace + self.xs)/self.screen_height,
+                (ml * self.linespace + self.ys)/self.screen_height]
+
     def change_show_step(self):
         self.showstep = self.chkstep.get()
         self.update()
@@ -262,23 +314,24 @@ class QiPan(object):
     def change_analyse(self):
         self.show_analyse = self.chkanalyse.get()
         if self.show_analyse:
-            config.read_cfg(self.cfg.get())
-            go.set_board_size(config.board_size)
             self.show_heatmap = True
             self.chkheatmap.set(True)
             cmd =config.apps["ZiGo"].split(",")
             self.analyser = intergtp.GTP_player(cmd, "ZiGo", go.WHITE)
             #self.analyser.stop_analyse()
-            if self.board and self.board.step>0:
-                sgf = sgfparser.SgfParser(board=self.board)
-                sgf.save("temp.sgf")
-                self.analyser.analyse("temp.sgf")
-            else:
-                self.analyser.analyse()
+            #if self.board and self.board.step>0:
+            #    sgf = sgfparser.SgfParser(board=self.board)
+            #    sgf.save("temp.sgf")
+            #    self.analyser.analyse(os.path.curdir + "/temp.sgf")
+            #else:
+            self.analyser.analyse()
         elif self.analyser:
             self.analyser.stop_analyse()
+            time.sleep(0.6)
             self.analyser.quit()
-            self.analyser = None           
+            self.analyser = None
+            self.show_heatmap = False
+            self.chkheatmap.set(self.show_heatmap)
             if os.path.exists("temp.sgf"):
                 os.remove("temp.sgf")
 
@@ -378,6 +431,16 @@ class QiPan(object):
             m = list(self.info.values.keys())[0]
             wb = self.info.values[m].winrate
             #self.update_heatmap(self.info.values)
+        elif not self.show_heatmap:
+            if self.heatmaps:
+                for hm in self.heatmaps:
+                    self.canvas.delete(hm)
+                self.heatmaps = []
+            if self.heatmap_texts:
+                for ht in self.heatmap_texts:
+                    self.canvas.delete(ht)
+                self.heatmap_texts=[]
+            
         wb = wb if c==go.BLACK else -wb
         ww = -wb
         #self.status['text'] = '{}手，估计黑方胜率：{:.1f}，白方胜率：{:.1f}，{}领先{:.1f}子。'.format(pos.step,\
@@ -393,11 +456,11 @@ class QiPan(object):
             if self.heatmaps:
                 for hm in self.heatmaps:
                     self.canvas.delete(hm)
+                self.heatmaps = []
             if self.heatmap_texts:
                 for ht in self.heatmap_texts:
                     self.canvas.delete(ht)
-            self.heatmaps = []
-            self.heatmap_texts=[]
+                self.heatmap_texts=[]
             #vs={}
             font = ("宋体", int(8* self.linespace/80))
             r = self.linespace*0.5
@@ -450,6 +513,11 @@ class QiPan(object):
             self.downstone(pos.to_move, next_move)
 
     def on_click(self, event):
+        if self.change_board:
+            self.board=self.change_board
+            self.showstep = self.change_step
+            self.change_board = None
+            self.update()
         col, row = self.coortoline(event.x, event.y)
         if col < 0 or col > go.N - 1 or row < 0 or row > go.N - 1:
             return
@@ -519,7 +587,7 @@ class QiPan(object):
             return 0
         score = self.board.score()
         self.hidden_score()
-        lwh = int(self.hdpi * 0.005)
+        lwh = int(self.height * 0.005)
         for b in self.board.scoreb:
             self.scores.append(self.canvas.create_rectangle(b[0] * self.linespace + self.xs - lwh,
                                                             b[1] * self.linespace + self.ys - lwh,
@@ -555,22 +623,67 @@ class QiPan(object):
         self.root.destroy()
         exit()
 
-    def on_event(self, event):
+    def on_key(self, event):
         if event.keysym == 'Next' or event.keysym == 'Right':
             self.next_step()
         elif event.keysym == 'Prior' or event.keysym == 'Left':
             self.previous_step()
         elif event.keysym == 'space':
             self.analyse()
+        elif event.keysym == 'p' or event.keysym == 'P':
+            self.move_pass()
+        elif event.keysym == 'Escape':
+            if self.change_board:
+                self.board=self.change_board
+                self.showstep = self.change_step
+                self.change_board = None
+                self.update()
+
+
+    def on_ctl_click(self, event):
+        if self.change_board:
+            self.board=self.change_board
+            self.change_board = None
+            self.showstep = self.change_step
+            self.update()
+        col, row = self.coortoline(event.x, event.y)
+        if col < 0 or col > go.N - 1 or row < 0 or row > go.N - 1:
+            return
+        if (row,col) in self.info.values.keys():
+            self.change_step = self.showstep
+            self.showstep = False
+            self.update()
+            pos = self.board.copy()
+            self.board.step = 0
+            self.board.recent = []
+            self.showstep=True
+            for move in self.info.values[(row,col)].nextmoves.split(" "):
+                m = go.get_coor_from_gtp(move)
+                if m==go.PASS or m==go.RESIGN or m is None:
+                    continue
+                self.board.play_move(m)
+            self.update()
+            self.change_board = pos
 
     def open(self):
         fn = tkinter.filedialog.askopenfilename(filetypes=[("sgf格式", "sgf")])
         pos = sgfparser.get_sgf_board(fn)
         self.start(pos)
 
+    def save(self):
+        fn = tkinter.filedialog.asksaveasfilename(filetypes=[("sgf格式", "sgf")])
+        sgf = sgfparser.SgfParser(board=self.board)
+        sgf.save(fn)
+        
+
     def next_step(self):
         if self.step >= self.board.step:
             return
+        if self.analyser:
+            c = self.board.get_color(self.step)
+            move = self.board.recent[self.step].move
+            vertex = go.get_cmd_from_coor(move)
+            self.analyser.play(vertex, c)
         self.step += 1
         pos = self.board.get_board(self.step)
         self.update(pos)
@@ -578,57 +691,83 @@ class QiPan(object):
     def previous_step(self):
         if self.step < 1:
             return
+        if self.analyser:
+            self.analyser.send("undo")
         self.step -= 1
         pos = self.board.get_board(self.step)
         self.update(pos)
 
     def undo(self):
         self.clicked = (-3, 0)
+        if self.show_analyse and self.analyser:
+            c = self.board.to_move
+            self.board.play_move(self.clicked)
+            self.analyser.send("undo")
+            self.update()
 
     def move_pass(self):
         self.clicked = go.PASS
+        if self.show_analyse and self.analyser:
+            c = self.board.to_move
+            self.board.play_move(self.clicked)
+            vertext =go.get_cmd_from_coor(self.clicked)
+            self.analyser.play(vertext, c)
+            self.update()
 
     def resign(self):
         self.clicked = go.RESIGN
 
     def play(self):
-        config.read_cfg(self.cfg.get())
-        go.set_board_size(config.board_size)
+        #config.read_cfg(self.cfg.get())
+        #go.set_board_size(config.board_size)
         main.play(player1=self.var_name1.get(), player2=self.var_name2.get(), qp=self, gtpon=True)
 
     def train(self):
-        config.read_cfg(self.cfg.get())
-        go.set_board_size(config.board_size)
-        path = tkinter.filedialog.askdirectory()
-        self.show_message('开始训练%s中的棋谱……' % (path))
-        trainth = threading.Thread(target=main.train, args=(path,))
+        self.show_message('开始训练……')
+        datas = dataset.DataSet(self)
+        datas.start_load()
+        self.train_net = network.Network(self.screen_height, is_train=True)
+        self.show_message(status='正在训练……')
+        trainth = threading.Thread(target = self.train_net.train, args=(datas,))
         trainth.setDaemon(True)
         trainth.start()
-        self.show_message(status='正在训练%s中的棋谱……' % (path))
 
-    def preprocess(self):
-        config.read_cfg(self.cfg.get())
-        go.set_board_size(config.board_size)
-        path = tkinter.filedialog.askdirectory()
-        self.show_message('开始获取棋谱%s中的数据……' % (path))
-        trainth = threading.Thread(target=main.preprocess, args=(path,))
-        trainth.setDaemon(True)
-        trainth.start()
+    def get_board(self):
+        #path = tkinter.filedialog.askdirectory()
+        self.show_message('开始获取棋谱%s中的数据……')
+        datas = dataset.DataSet(self)
+        plane = datas.get_plane()
+        #print(plane.shape())
+        #self.get_label()
+        #self.train_net = network.Network(self.screen_height, is_train=False)
+        #vs = self.train_net.run(plane)
+        #print(vs)
+        #testoval = self.canvas.create_oval(vs[2]-20, vs[3]-20,vs[2]+20,vs[3]+20)
+        print("board size:{}, line space:{}, x:{}, y:{}".format(vs[0], vs[1], vs[2], vs[3]))
 
     def reduce_lr(self):
         self.self_train.reduce_lr()
 
-    def selftrain(self):
-        config.read_cfg(self.cfg.get())
-        go.set_board_size(config.board_size)
-        path = tkinter.filedialog.askdirectory()
-        self.show_message('开始自我训练%s中的棋谱……' % (path))
-        #self.train_net = policy.PolicyNetwork(is_train=True, selftrain=True)
-        selfplay.selftrain(qp=self, sgfdir=path, net=None)
+    def restart(self):
+        if self.analyser:
+            self.analyser.send("clear_board")
+        self.start()
+
+    def get_traindata(self):
+        #config.read_cfg(self.cfg.get())
+        #go.set_board_size(config.board_size)
+        #path = tkinter.filedialog.askdirectory()
+        self.show_message('开始自我训练……')
+        datas = dataset.DataSet(self)
+        datas.start_auto()
+        #self.train_net = network.Network(self.screen_height, is_train=True)
         self.show_message(status='正在进行增强学习……')
+        #trainth = threading.Thread(target = self.train_net.train, args=(datas,))
+        #trainth.setDaemon(True)
+        #trainth.start()
 
     def cfg_window(self):
-        cfg = config.ConfigWindow(self.hpx*1, self.hpx*0.6)
+        cfg = config.ConfigWindow(self.height*1, self.height*0.6)
         cfg.mainloop()
 
     def change_summary(self):
@@ -636,8 +775,7 @@ class QiPan(object):
         if config.summary:
             if get_process_count('tensorboard.exe') == 0:
                 subprocess.Popen(["tensorboard.exe", "--logdir",
-                                  "d:\\myprogram\\ai\\zigo\\log\\b%df%d" % (config.BLOCKS_NUM,
-                                                                            config.FEATURE_NUM)], shell=False)
+                                  "d:\\myprogram\\ai\\zigoAc\\log"], shell=False)
             # C:\Program Files (x86)\Google\Chrome\Application\chrome.exe
             subprocess.Popen(["C:\Program Files (x86)\Google\Chrome\Application\chrome.exe", "http://localhost:6006"])
         else:

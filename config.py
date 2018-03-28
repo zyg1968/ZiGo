@@ -31,7 +31,13 @@ decay_rate = 0.1                #学习率降低到的比率 新的=旧的*比�
 momentum = 0.9                  #动量                 0.9
 batch_size = 32                 #小批量的大小         32
 scope = 'resnet_zero'           #网络域名
-last_config = 'config-b6f2'
+last_config = 'config.ini'
+background = 'pic/bj.png'
+blackstone = 'pic/Black61.png'
+whitestone = 'pic/White61.png'
+blackbowls = 'pic/hqh.png'
+whitebowls = 'pic/bqh.png'
+lastmove = 'pic/last.png'
 apps = {}
 
 play_num = 50
@@ -47,11 +53,11 @@ def read_cfg(config_file='config'):
     global save_name, trained_model, log_dir, RESIDUAL_FILTERS, data_dir, PLAY_FEATURES
     global STATE_FEATURES, last_config, play_num, test_num, sample_num
     global apps, test_steps, net_type, policy_size, board_size, playouts
-    config_file = 'config/%s.ini' % (config_file)
+    global background,blackstone,whitestone,blackbowls,whitebowls,lastmove
+
+    config_file = '%s.ini' % (config_file)
     cf = cp.ConfigParser()
     cf.read(config_file)
-    if config_file=='config/config.ini':
-        last_config = cf.get('PLAY', 'last_config')
     mtcs_width = cf.getint('MTCS', 'width')
     mtcs_depth = cf.getint('MTCS', 'depth')
     mtcs_time = cf.getint('MTCS', 'time')
@@ -81,6 +87,13 @@ def read_cfg(config_file='config'):
     test_num = cf.getint('SELF_TRAIN', 'test_num')
     sample_num = cf.getint('SELF_TRAIN', 'sample_num')
     test_steps = cf.getint('SELF_TRAIN', 'test_steps')
+    background =  cf.get('THEME', 'background')
+    blackstone = cf.get('THEME', 'blackstone')
+    whitestone = cf.get('THEME', 'whitestone')
+    blackbowls = cf.get('THEME', 'blackbowls')
+    whitebowls = cf.get('THEME', 'whitebowls')
+    lastmove = cf.get('THEME', 'lastmove')
+
     apps={}
     namesstr = cf.get("APPS", "names")
     names = namesstr.split(",")

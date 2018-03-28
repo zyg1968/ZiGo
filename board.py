@@ -343,6 +343,12 @@ class Board():
 
     def get_color(self, step):
         return self.first_color if step%2==0 else go.oppo_color(self.first_color)
+
+    def get_step_from_move(self, move):
+        for i,rc in enumerate(self.recent):
+            if rc.move==move:
+                return i
+        return 0
         
     def score(self):
         'Return score from B perspective. If W is winning, score is negative.'
@@ -434,7 +440,7 @@ class Board():
 
         # suicide is illegal
         if len(new_group.liberties) == 0:
-            raise IllegalMove("Move at {} would commit suicide!\n".format(c))
+            print("Move at {} would commit suicide!\n".format(c))
         return captured_stones
 
     def create_group(self, color, c, liberties):

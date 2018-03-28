@@ -44,39 +44,17 @@ def gui():
     root.protocol("WM_DELETE_WINDOW", on_quit)
     #设置窗口图标
     #root.iconbitmap('pic/zigo.ico')
-    width_px = root.winfo_screenwidth()
-    height_px = root.winfo_screenheight()
-    width_mm = root.winfo_screenmmwidth()
-    height_mm = root.winfo_screenmmheight()
-    width_in = width_mm / 25.4
-    height_in = height_mm / 25.4
-    width_dpi = width_px/width_in
-    height_dpi = height_px/height_in
-    root.geometry('%dx%d+%d+%d' % (width_px*0.95, height_px*0.9, 0, 0))
     root.resizable(width=True, height=True)
     root.title("围棋")
-    hpad = 30
-    linespace = int((height_px - hpad) / (go.N+1.6))
-    img=Image.open('pic/bj3.png')
-    img=img.resize((int(height_px*0.95), int(height_px*0.95)), Image.ANTIALIAS)
-    bjimg=ImageTk.PhotoImage(img)
-    img=Image.open('pic/Black61.png')
-    img=img.resize((int(linespace*0.95), int(linespace*0.95)), Image.ANTIALIAS)
-    blackstone = ImageTk.PhotoImage(img)
-    img=Image.open('pic/White61.png')
-    img=img.resize((int(linespace*0.95), int(linespace*0.95)), Image.ANTIALIAS)
-    whitestone = ImageTk.PhotoImage(img)
-    img=Image.open('pic/hqh.png')
-    img=img.resize((int(height_px*0.15), int(height_px*0.15)), Image.ANTIALIAS)
-    hqh = ImageTk.PhotoImage(img)
-    img=Image.open('pic/bqh.png')
-    img=img.resize((int(height_px*0.15), int(height_px*0.15)), Image.ANTIALIAS)
-    bqh = ImageTk.PhotoImage(img)
-    img=Image.open('pic/last.png')
-    img=img.resize((int(linespace*0.34), int(linespace*0.34)), Image.ANTIALIAS)
-    last = ImageTk.PhotoImage(img)
-    qp=QiPan('显示', root, bjimg, blackstone, whitestone, hqh, bqh, last, height_dpi, height_px)
+    bjimg=Image.open(config.background)
+    blackstone=Image.open(config.blackstone)
+    whitestone=Image.open(config.whitestone)
+    hqh=Image.open(config.blackbowls)
+    bqh=Image.open(config.whitebowls)
+    last=Image.open(config.lastmove)
+    qp=QiPan('显示', root, bjimg, blackstone, whitestone, hqh, bqh, last)
     return qp, root
+
 
 #play policy --read-file=saved_models/savedmodel
 def play(player1='player', player2='ZiGo', gtpon=False, qp=None):

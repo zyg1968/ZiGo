@@ -89,6 +89,8 @@ def get_coor_from_gtp(cmd):
         return PASS
     if cmd.lower()=="resign":
         return RESIGN
+    if len(cmd)<2 or len(cmd)>3 or cmd[0] not in COLLUM_STR:
+        return None
     y = COLLUM_STR.index(cmd[0])
     x = N - int(cmd[1:])
     return (x,y)
