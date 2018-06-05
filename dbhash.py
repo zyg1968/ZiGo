@@ -6,11 +6,10 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import sqlite3
-import shufflenet
+#import sqlite3
 import go
 import board
-import dataset
+#import dataset
 import numpy as np
 import time
 
@@ -41,7 +40,7 @@ def calc_hash(stones, to_move, ko):
         for j in range(go.MAX_BOARD):
             index = i*go.MAX_BOARD+j
             if i>=pad and i<go.N+pad and j>=pad and j<go.N+pad:
-                c = stones[i-pad][j-pad]
+                c = stones[(i-pad)*go.N+(j-pad)]
                 res = res ^ (ZOBRIST[c][index])
             else:
                 res = res ^ (ZOBRIST[go.BORDER][index])
@@ -49,17 +48,18 @@ def calc_hash(stones, to_move, ko):
         return res
     if to_move == go.BLACK:
         res = res ^ ZOBRIST_BLACKTOMOVE
-    if ko:
+    if ko is not None and ko>0 and ko<go.N2:
         res = res ^ (ZOBRIST[go.KO][get_index(ko)])
     return res
 
 
 def get_index(move):
+    y,x=divmod(move, go.N)
     pad = int((go.MAX_BOARD-go.N)/2)
-    return (move[0]+pad)*(go.MAX_BOARD)+move[1]+pad
+    return (y+pad)*(go.MAX_BOARD)+x+pad
 
 init_zobrist()
-
+"""
 class SqliteDb:
     def __init__(self, file="zigo"):
         file = file+"-"+str(go.N)+".db"
@@ -210,3 +210,4 @@ def rotate_move(move,ind):
             newx = x
             newy = go.N - y - 1
     return newy,newx
+"""

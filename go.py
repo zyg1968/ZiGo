@@ -1,27 +1,28 @@
-﻿'''
-A board is a NxN numpy array.
-A Coordinate is a tuple index into the board.
-A Move is a (Coordinate c | None).
-A PlayerMove is a (Color, Move, Captured, Score) object
+﻿#!/usr/bin/env python3
+#
+#    This file is part of ZiGo.
+#    Copyright (C) 2018 ZiGo
+#
+# -*- coding: utf-8 -*-
 
-(0, 0) is considered to be the upper left corner of the board, and (18, 0) is the lower left.
-'''
 from collections import namedtuple
 import copy
 import itertools
 import gtp
 import numpy as np
+import random
 
 MAX_BOARD = 19
 
 EMPTY, BLACK, WHITE, BORDER, KO, FILL, UNKNOWN = range(0, 7)
 
-MISSING_GROUP_ID = -1
+UNDO = -3
 
 class IllegalMove(Exception): pass
 
 # these are initialized by set_board_size
 N = None
+N2 = None
 ALL_COORDS = []
 EMPTY_BOARD = None
 NEIGHBORS = {}
@@ -36,35 +37,50 @@ def set_board_size(n):
     Hopefully nobody tries to run both 9x9 and 19x19 game instances at once.
     Also, never do "from go import N, W, ALL_COORDS, EMPTY_BOARD".
     '''
-    global N, ALL_COORDS, EMPTY_BOARD, NEIGHBORS, DIAGONALS, COLLUM_STR, PASS, RESIGN
+    global N, N2, ALL_COORDS, EMPTY_BOARD, NEIGHBORS, DIAGONALS, COLLUM_STR, PASS, RESIGN
     if N == n: return
     N = n
-    PASS = (N, 0)
-    RESIGN = (N, 1)
-    ALL_COORDS = [(i, j) for i in range(n) for j in range(n)]
-    EMPTY_BOARD = np.zeros([n, n], dtype=np.int8)
+    N2 = n*n
+    PASS = N2
+    RESIGN = N2+1
+    ALL_COORDS = [i for i in range(N2)]
+    EMPTY_BOARD = [0 for i in range(N2)]
     def check_bounds(c):
-        return c[0] % n == c[0] and c[1] % n == c[1]
-
-    NEIGHBORS = {(x, y): list(filter(check_bounds, [(x+1, y), (x-1, y), (x, y+1), (x, y-1)])) for x, y in ALL_COORDS}
-    DIAGONALS = {(x, y): list(filter(check_bounds, [(x+1, y+1), (x+1, y-1), (x-1, y+1), (x-1, y-1)])) for x, y in ALL_COORDS}
+        if c<0 or c>=N2:
+            return False
+        x,y=unflatten_coords(c)
+        return x>=0 and x<N and y>=0 and y<N
+    for i in ALL_COORDS:
+        x1,y1=unflatten_coords(i)
+        ni = []
+        di = []
+        for (x,y) in [(x1+1,y1),(x1-1,y1),(x1,y1+1),(x1,y1-1)]:
+            if x>=0 and x<N and y>=0 and y<N:
+                #{i: list(filter(check_bounds, [i+1, i-1, i+n, i-n])) for i in ALL_COORDS}
+                ni.append(y*n+x)
+        for (x,y) in [(x1+1,y1+1),(x1-1,y1+1),(x1+1,y1-1),(x1-1,y1-1)]:
+            if x>=0 and x<N and y>=0 and y<N:
+                #{i: list(filter(check_bounds, [i+n+1, i-n+1, i+n-1, i-n-1])) for i in ALL_COORDS}
+                di.append(y*n+x)
+        NEIGHBORS[i] = ni
+        DIAGONALS[i] = di
 
     COLLUM_STR='ABCDEFGHJKLMNOPQRSTUVWXYZ'
 
 class AnalyseData(namedtuple('AnalyseData', ['move', 'allvisits', 'visits', 'winrate','nextmoves'])): pass
 
 def result_str(result):
-    ar = abs(result)
-    s = '中盘胜'
-    if ar == N*N+1:
-        s = get_color_str(result) + '中盘胜' 
-    elif ar == N*N+2:
-        s = get_color_str(-result) + '方超时负' 
-    elif ar == 0:
-        s = '和棋'
+    result = result.upper()
+    winner = "黑" if result[0]=="B" else "白"
+    winp = ""
+    if result[2:]=="RESIGN":
+        winp = "中盘胜"
+    elif result[2:]=="TIME":
+        winp = "对方超时胜"
     else:
-        s = '%s胜%.1f子' % (get_color_str(result), ar)
-    return s
+        p = float(result[2:])
+        winp = "胜{}目".format(p)
+    return winner+winp
 
 def get_point_str(p):
     return "{}领先{:.1f}目".format(get_color_str(p), abs(p))
@@ -85,20 +101,37 @@ def oppo_color(color):
     return BLACK+WHITE - color
 
 def get_coor_from_gtp(cmd):
-    if cmd.lower()=="pass":
-        return PASS
-    if cmd.lower()=="resign":
-        return RESIGN
-    if len(cmd)<2 or len(cmd)>3 or cmd[0] not in COLLUM_STR:
+    if not cmd:
         return None
-    y = COLLUM_STR.index(cmd[0])
-    x = N - int(cmd[1:])
-    return (x,y)
+    ucmd = cmd.upper()
+    if ucmd=="PASS":
+        return PASS
+    if ucmd=="RESIGN":
+        return RESIGN
+    if ucmd=="UNDO":
+        return UNDO
+    if len(ucmd)<2 or len(ucmd)>3 or ucmd[0] not in COLLUM_STR:
+        return None
+    x = COLLUM_STR.index(ucmd[0])
+    y = N-int(ucmd[1:])
+    return y*N+x
+
+def get_cmd_from_coor(coor):
+    if coor is None or coor == PASS:
+        return 'PASS'
+    elif coor==RESIGN:
+        return 'RESIGN'
+    elif coor == UNDO:
+        return 'UNDO'
+    elif coor>=0 and coor<N2:
+        y, x = divmod(coor, N)
+        return COLLUM_STR[x]+str(N-y)
+    return 'PASS'
 
 def flatten_coords(c):
     if not c:
         c=PASS
-    r = N * c[0] + c[1]
+    r = N * c[1] + c[0]
     if r>N*N+1:
         return N*N
     return r
@@ -106,11 +139,12 @@ def flatten_coords(c):
 def unflatten_coords(f):
     if f<0 or f>N*N+2:
         return None
-    return divmod(f, N)
+    return (f%N,f//N)
 
 def take_n(n, iterable):
     return list(itertools.islice(iterable, n))
 
+'''
 def get_coor_from_vertex(vertex):
     if vertex == gtp.PASS:
         return PASS
@@ -125,18 +159,61 @@ def get_vertex_from_coor(coor):
         return gtp.RESIGN
     return (coor[1]+1, N-coor[0])
 
-def get_cmd_from_coor(coor):
-    if coor[0] in range(N) and coor[1] in range(N):
-        return COLLUM_STR[coor[1]]+str(N-coor[0])
-    elif coor==RESIGN:
-        return 'RESIGN'
-    return 'PASS'
-
 def get_cmd_from_vertex(vertex):
     if vertex[0] in range(1, N+1) and vertex[1] in range(1, N+1):
         return COLLUM_STR[vertex[0]-1]+str(vertex[1])
     elif vertex == gtp.RESIGN:
         return 'RESIGN'
     return 'PASS'
+'''
+
+def place_stones(bd, color, stones):
+    #assert stones is list, '检查stones, 应该是个list数组：' + str(type(stones))
+    for s in stones:
+        if s>=0 and s<N2:
+            bd[s] = color
+
+def fill_stone(position):
+    pos = copy.deepcopy(position)
+    move = None
+    moves = None
+    while not pos.is_gameover:
+        if move is None:
+            moves = pos.get_can_moves()
+        if not moves:
+            move = PASS
+        else:
+            move = moves[0]
+        ill, caps = pos.play_move(move, check_legal=True)
+        if ill==0:
+            move = None
+        else:
+            moves.remove(move)
+    return pos
+
+def simulate_game(position):
+    pos = copy.deepcopy(position)
+    move = None
+    moves = None
+    while not pos.is_gameover:
+        if move is None:
+            moves = pos.get_can_moves()
+        if not moves:
+            move = PASS
+        else:
+            move = random.choice(moves)
+        ill, caps = pos.play_move(move, check_legal=True)
+        if ill==0:
+            move = None
+        else:
+            moves.remove(move)
+    return pos
+
+def delete_dead(position):
+    pos = simulate_game(position)
+    #changed = np.where(position.stones!=pos.stones)
+    #pos = position.copy()
+    #place_stones(pos.stones, EMPTY, dead)
+    return pos
 
 set_board_size(19)

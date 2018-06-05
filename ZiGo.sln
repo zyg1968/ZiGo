@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26730.15
+VisualStudioVersion = 15.0.27130.2027
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "ZiGo", "ZiGo.pyproj", "{A08D4E02-D3DA-4805-A502-130DF03FA7ED}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "ZiGo", "ZiGo.pyproj", "{88D21EDA-8D9B-4E90-B5E9-AD3D67B9AC33}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,13 +11,13 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{A08D4E02-D3DA-4805-A502-130DF03FA7ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A08D4E02-D3DA-4805-A502-130DF03FA7ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{88D21EDA-8D9B-4E90-B5E9-AD3D67B9AC33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{88D21EDA-8D9B-4E90-B5E9-AD3D67B9AC33}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {E483490C-DD6E-485E-9163-34650BC3F38C}
+		SolutionGuid = {E45C4F79-D535-4815-B629-5C4B375AE30E}
 	EndGlobalSection
 EndGlobal

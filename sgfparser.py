@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+#
+#    This file is part of ZiGo.
+#    Copyright (C) 2018 ZiGo
+#
+# -*- coding: utf-8 -*-
+
 import re
 import go
 import board
@@ -43,12 +50,13 @@ def parse_stones(s):
 def parse_move(coor):
     if coor=='' or coor == ' ' or coor == 'tt':
         return go.PASS
-    return SGF_POS.index(coor[0]), SGF_POS.index(coor[1])
+    return SGF_POS.index(coor[1])*go.N+SGF_POS.index(coor[0])
 
 def unparse_move(coor):
     if coor == go.PASS:
         return 'tt'
-    return SGF_POS[coor[0]] + SGF_POS[coor[1]]
+    x,y=go.unflatten_coords(coor)
+    return SGF_POS[x] + SGF_POS[y]
 
 def parse_color(cstr):
     return go.BLACK if cstr=='B' else go.WHITE
@@ -62,7 +70,7 @@ def parse_result(r):
     result = 0
     if r=='0':
         return 0
-    if r:
+    if r and '+' in r:
         rs = r.split('+')
         wc = 1 if rs[0].upper()=='B' else -1
         if rs[1].upper().startswith('R'): #中盘胜
@@ -79,9 +87,9 @@ def unparse_result(r):
     s = 'B+' if r>0 else 'W+'
     ra = abs(r)
     if ra == go.N*go.N+1:
-        s += 'R'
+        s += 'RESIGN'
     elif ra == go.N*go.N+2:
-        s += 'Time'
+        s += 'TIME'
     elif ra == 0:
         s = '0'
     else:
@@ -145,6 +153,8 @@ class SgfParser():
             return
         s = re.sub('[ \r\n\t]*', '', self.content)
         m = re.match(r'^\(;([\s\S]+?)(;[\s\S]+)\)$', s)
+        if not m:
+            return
         hstr, mstr = m.group(1), m.group(2)
         self.header = parse_props(hstr)
         self.stones = parse_stones(mstr)
@@ -179,8 +189,9 @@ class SgfParser():
         pos.player1_name = str(self.header_prop('PB'))
         pos.player2_name = str(self.header_prop('PW'))
         pos.handicap = self.header_prop('HA')
-        pos.result = parse_result(self.header_prop('RE'))
-        if pos.result == 0:
+        pos.result = self.header_prop('RE')
+        pos.points = parse_result(pos.result)
+        if pos.points == 0:
             return []
         ab = self.header_prop("AB")
         aw = self.header_prop("AW")
@@ -207,8 +218,9 @@ class SgfParser():
         pos.to_move = pos.first_color
         pos.player1_name = str(self.header_prop('PB'))
         pos.player2_name = str(self.header_prop('PW'))
-        pos.handicap = self.header_prop('HA')
-        pos.result = parse_result(self.header_prop('RE'))
+        pos.handicap = self.header_prop('HA') or 0
+        pos.result = self.header_prop('RE')
+        pos.points = parse_result(pos.result)
         ab = self.header_prop("AB")
         aw = self.header_prop("AW")
         if ab:
@@ -231,7 +243,7 @@ class SgfParser():
         self.header['FF'] = '4'
         self.header['GM'] = '1'
         self.header['CA'] = 'utf-8'
-        self.header['RE'] = unparse_result(pos.result)
+        self.header['RE'] = pos.result
         self.header['KM'] = str(pos.komi)
         self.header['HA'] = pos.handicap
         self.header['PB'] = pos.player1_name

@@ -8,8 +8,13 @@ tests
 sgf
 log
 logs
+back
+build
 pic
 traindata
+config
+cgos-client
+dist
 zigoc
 saved_*
 models
@@ -23,4 +28,4 @@ pyvenv.cfg
 *.7z
 *.rar
 *.xz
-
+*.sgf

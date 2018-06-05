@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{a08d4e02-d3da-4805-a502-130df03fa7ed}</ProjectGuid>
+    <ProjectGuid>{88d21eda-8d9b-4e90-b5e9-ad3d67b9ac33}</ProjectGuid>
     <ProjectHome />
     <StartupFile>main.pyw</StartupFile>
     <SearchPath />
@@ -11,11 +11,9 @@
     <OutputPath>.</OutputPath>
     <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
-    <InterpreterId>Global|PythonCore|3.6</InterpreterId>
-    <IsWindowsApplication>True</IsWindowsApplication>
-    <CommandLineArguments>selftrain</CommandLineArguments>
-    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <InterpreterId />
     <Name>ZiGo</Name>
+    <IsWindowsApplication>True</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
   <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
@@ -23,35 +21,29 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="allsearch.py" />
     <Compile Include="board.py" />
-    <Compile Include="config.py" />
-    <Compile Include="dbhash.py">
+    <Compile Include="cgosmatchs.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="go.py" />
+    <Compile Include="cgosplayer.py" />
+    <Compile Include="config.py" />
     <Compile Include="dataset.py" />
+    <Compile Include="dbhash.py" />
+    <Compile Include="go.py" />
+    <Compile Include="group.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="intergtp.py" />
     <Compile Include="main.pyw" />
-    <Compile Include="player.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="processplay.py" />
-    <Compile Include="qipan.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="policy.py" />
-    <Compile Include="scrolltext.py">
-      <SubType>Code</SubType>
-    </Compile>
-    <Compile Include="selfplay.py" />
+    <Compile Include="net.py" />
+    <Compile Include="network.py" />
+    <Compile Include="player.py" />
+    <Compile Include="qipan.py" />
+    <Compile Include="scrolltext.py" />
     <Compile Include="sgfparser.py" />
-    <Compile Include="shufflenet.py" />
-    <Compile Include="strategies.py" />
-    <Compile Include="utils.py" />
   </ItemGroup>
   <ItemGroup>
-    <InterpreterReference Include="Global|PythonCore|3.6" />
+    <Content Include="config.ini" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
 </Project>

@@ -1,76 +1,134 @@
-import policy
-import threading
-import time
-import sys
-from strategies import *
+#!/usr/bin/env python3
+#
+#    This file is part of ZiGo.
+#    Copyright (C) 2018 ZiGo
+#
+# -*- coding: utf-8 -*-
+
+import threading, time, sys
+import go
+import config
 
 policy_names=['policy', 'ramdom', 'mtcs']
-PLAYER, POLICY, GTP = 0, 1, 2
+PLAYER, POLICY, GTP, CGOS = 0, 1, 2, 3
 
 class Player():
-    def __init__(self, name, time=20, net=None, color=1, gtpon=False):
+    def __init__(self, name, player_type=PLAYER, time=20, color=1):
         self.name=name
+        self.player_type = player_type
         self.time=time
-        name = name.lower()
-        self.passed = 0
+        self.countdown = 0
+        self.counttimes = 0
         self.color = color
-        self.net = net
-        if name in policy_names:
-            self.player_type = POLICY
-            self.net=policy.PolicyNetwork(is_train=False) if net is None else net
-            if name == policy_names[2]:
-                self.mcts = MCTSPlayer(self.net)
-        else:
-            self.player_type = PLAYER
+        self.is_quit = False
 
-    def get_move(self, board, caps=None):
-        assert(board.to_move == self.color)
-        name = self.name.lower()
-        if name not in policy_names:
-            return None
-        start = time.time()
-        all_move_probs, win_rate = self.net.run(board)
-        if name == policy_names[0]:
-            move = select_most_likely(board, all_move_probs)
-        elif name == policy_names[1]:
-            move = select_weighted_random(board, all_move_probs)
-        elif name == policy_names[2]:
-            move, all_move_probs, win_rate = self.mcts.suggest_move(board, caps)
-        return move, win_rate
-            #board.play_move(move, board.to_move)
+    def genmove(self, color = None):
+        pass
+    def play(self, coord, color = None):
+        pass
+    def undo(self):
+        pass
+    def komi(self, komi):
+        pass
+    def boardsize(self, size):
+        pass
+    def clear_board(self):
+        pass
+    def quit(self):
+        pass
+    def score(self):
+        pass
+    def handicap(self, handicap, handicap_type="fixed"):
+        pass
+    def set_time(self, time_settings):
+        ts = time_settings.split(' ')
+        if len(ts)>0:
+            self.time = int(ts[0])
+        if len(ts)>1:
+            self.countdown = int(ts[1])
+        if len(ts)>2:
+            self.counttimes = int(ts[2])
 
+    def time_left(self, color = None, msec = 0):
+        self.time = int(msec/1000)
 
-class InputThread (threading.Thread):
-    def __init__(self, name, playman):
+def play(player1, player2, qp=None, start_color=go.BLACK):
+    thplay = PlayThread('下棋', qp, player1, player2, start_color=start_color)
+    thplay.setDaemon(True)
+    thplay.start()
+
+class PlayThread (threading.Thread):
+    def __init__(self, name, qp, player1, player2, start_color=go.BLACK):
         threading.Thread.__init__(self)
         self.name = name
-        self.playman = playman
+        self.qp=qp
+        self.running=False
+        self.start_color = start_color
+        self.player1 = player1
+        self.player2 = player2
+        self.qp.start(self.qp.board)
 
     def run(self):
-        print ("开启线程： " + self.name)
-        if self.name.startswith('命令行'):
-            self.waitcmd()
-        else:
-            self.waitmessage()
-        print ("退出线程： " + self.name)
+        config.logger.info("开启线程： " + self.name)
+        self.running=True
+        self.playloop()
+        self.running=False
+        if self.player1.player_type == GTP:
+            self.player1.quit()
+        if self.player2.player_type == GTP:
+            self.player2.quit()
+        config.logger.info("退出线程： " + self.name)
 
-    def waitcmd(self):
-        while (not self.playman.engine.disconnect) and self.playman.running:
-            c = self.playman.gomanager.to_move
-            cmd = input()
-            print('你输入了命令：%s' % (cmd))
-            engine_reply = self.playman.engine.send(cmd)
-            sys.stdout.write(engine_reply)
-            if engine_reply.startswith('='):
-                self.playman.engine.make_move(parse_move(cmd))
-                strs=cmd.upper().split(' ')
-                if len(strs)<2:
-                    return
-                color, vertex=gtp.parse_move(strs[1:])
-                x,y=go.get_coor_from_vertex(vertex)
-                print('你命令走子成功：%s(%d,%d)' % (strs[-1], x, y))
-                self.playman.qp.update(self.playman.gomanager)
-                self.playman.qp.havemoved = True
+    def playloop(self):
+        c = go.oppo_color(self.start_color)
+        while(self.running and not self.qp.board.is_gameover):
+            #c = self.qp.board.to_move
+            c = go.oppo_color(c)
+            player = self.player1 if c==self.player1.color else self.player2
+            opponent = self.player2 if c==self.player1.color else self.player1
+            gtpmove = ""
+            if player.player_type == POLICY:
+                coor, win_rate = player.get_move(self.qp.board, caps)
+                self.qp.board.win_rate = win_rate
+                gtpmove = go.get_cmd_from_coor(coor)
+                #coor=self.gomanager.get_coor_from_vertex(vertex)  #从上倒下，左到右，0开始
+            elif player.player_type == GTP:
+                gtpmove = player.genmove(c)
+                #coor= go.get_coor_from_gtp(coorstr)
+            elif player.player_type == PLAYER:
+                self.qp.clicked=None
+                while(self.qp.clicked is None):
+                    time.sleep(0.1)
+                coor=self.qp.clicked
+                self.qp.clicked = None
+                gtpmove = go.get_cmd_from_coor(coor)
+            else:
+                config.logger.error("Not know player.")
+            gtpmove = gtpmove.upper()
+            if gtpmove == "RESIGN":
+                self.qp.board.points = go.N*go.N+1 if c==go.WHITE else -(go.N*go.N+1)
+                self.qp.board.result = self.qp.board.get_result() 
+                break
+            elif gtpmove == "UNDO":
+                self.qp.board.undo()
+                opponent.undo()
+                self.qp.board.undo() 
+                opponent.undo()
+                self.qp.update()
+                c = go.oppo_color(c)
+            else:
+                if opponent.player_type == GTP:
+                    opponent.play(gtpmove, c)
+                if player.player_type != PLAYER:
+                    self.qp.play(gtpmove, c)
+            self.running=config.running
 
-    def waitmessage(self):
-        pass
+        result=""
+        if self.qp.board.result is None:
+            self.qp.board.points=self.qp.board.final_score()
+            self.qp.board.result = self.qp.board.get_result()
+        result = go.result_str(self.qp.board.result)
+        msg = "对局结束。%s" % (result)
+        config.logger.info(msg)
+        #self.qp.show_message(msg=msg, status=msg)
+

@@ -1,37 +1,19 @@
-﻿
+﻿#!/usr/bin/env python3
+#
+#    This file is part of ZiGo.
+#    Copyright (C) 2018 ZiGo
+#
+# -*- coding: utf-8 -*-
+
 from tkinter import *
 import configparser as cp
 import go
+import os
+import logging
+from logging.handlers import RotatingFileHandler
 
-BLOCKS_NUM = 20                 #残差网络块数         20
-FEATURE_NUM = 17                #总特征数             17
-RESIDUAL_FILTERS = 256          #残差滤波通道数       256
-PLAY_FEATURES = 1               #当前走子特征数       1 
-STATE_FEATURES = 2              #当前状态特征数       2
-policy_size = 1                   #棋盘边界             1
 board_size = 19
-net_type = 'fractal'            #网络类型【fractal,resnet,shuffle,fuse】
-#除去以上两种特征数，剩下的为历史特征数
 running = True                  #控制循环用
-
-mtcs_width = 10                 #蒙特卡洛搜索宽度
-mtcs_depth = 10                 #蒙特卡洛搜索深度
-mtcs_time = 1                   #蒙特卡洛搜索时间
-playouts    = 800
-vresign = 0.05                  #投降的胜率阈值       0.05
-summary = False                 #是否打开观察记录表
-save_dir = 'models'             #模型及权重数据保存起始目录
-data_dir = 'processed_data'     #训练的数据保存起始目录
-save_name = 'zigo'              #模型及权重数据保存名
-trained_model = 'old'           #训练的历史模型和权重数据保存目录
-log_dir = 'log'                 #观察记录表数据保存起始目录
-learning_rate = 0.1             #初始学习率           0.1
-decay_steps = 10000000          #学习率降低的训练步数 200000
-decay_rate = 0.1                #学习率降低到的比率 新的=旧的*比率 0.1
-momentum = 0.9                  #动量                 0.9
-batch_size = 32                 #小批量的大小         32
-scope = 'resnet_zero'           #网络域名
-last_config = 'config.ini'
 background = 'pic/bj.png'
 blackstone = 'pic/Black61.png'
 whitestone = 'pic/White61.png'
@@ -40,66 +22,81 @@ whitebowls = 'pic/bqh.png'
 lastmove = 'pic/last.png'
 apps = {}
 
-play_num = 50
-test_num = 50
-sample_num = 320
-test_steps = 5000
+server = 'cgos.boardspace.net'
+port9 = 6867
+port13 = 6813
+port19 = 6819
+username = None
+password = None
+engine_name = 'ZiGo'
+cgos_log = 'cgos.log'
+log_level = 20
+file_log_level = 10
+sgf_dir = None
+lz_dir = 'leelaz'
 
-maxelo = -90000
+max_changes = 10
+show_stats = True
+
+# Log debug output to file
+logger = None
+
 
 def read_cfg(config_file='config'):
-    global mtcs_width, mtcs_depth, mtcs_time, vresign, summary, BLOCKS_NUM, FEATURE_NUM
-    global learning_rate, decay_steps, decay_rate, momentum, batch_size, scope, save_dir
-    global save_name, trained_model, log_dir, RESIDUAL_FILTERS, data_dir, PLAY_FEATURES
-    global STATE_FEATURES, last_config, play_num, test_num, sample_num
-    global apps, test_steps, net_type, policy_size, board_size, playouts
-    global background,blackstone,whitestone,blackbowls,whitebowls,lastmove
+    global apps, board_size, sgf_dir, max_changes, log_level, file_log_level, show_stats
+    global background,blackstone,whitestone,blackbowls,whitebowls,lastmove,lz_dir
+    global server, port9, port13, port19, username, password, engine_name, cgos_log
+    global logger
 
-    config_file = '%s.ini' % (config_file)
     cf = cp.ConfigParser()
-    cf.read(config_file)
-    mtcs_width = cf.getint('MTCS', 'width')
-    mtcs_depth = cf.getint('MTCS', 'depth')
-    mtcs_time = cf.getint('MTCS', 'time')
-    playouts = cf.getint('MTCS', 'playouts')
-    vresign = cf.getfloat('PLAY', 'vresign')
-    board_size = cf.getint('PLAY', 'board_size')
-    summary = cf.getboolean('TRAIN', 'summary')
-    data_dir = cf.get('TRAIN', 'data_dir')
-    save_dir = cf.get('TRAIN', 'save_dir')
-    save_name = cf.get('TRAIN', 'save_name')
-    trained_model = cf.get('TRAIN', 'trained_model')
-    log_dir = cf.get('TRAIN', 'log_dir')
-    BLOCKS_NUM = cf.getint('POLICY', 'blocks')
-    FEATURE_NUM = cf.getint('POLICY', 'features')
-    PLAY_FEATURES = cf.getint('POLICY', 'play_features')
-    STATE_FEATURES = cf.getint('POLICY', 'state_features')
-    RESIDUAL_FILTERS = cf.getint('POLICY', 'residual_filters')
-    net_type = cf.get('POLICY', 'net_type')
-    policy_size = cf.getint('POLICY', 'policy_size')
-    learning_rate = cf.getfloat('POLICY', 'learning_rate')
-    decay_steps = cf.getint('POLICY', 'decay_steps')
-    decay_rate = cf.getfloat('POLICY', 'decay_rate')
-    momentum = cf.getfloat('POLICY', 'momentum')
-    batch_size = cf.getint('POLICY', 'batch_size')
-    scope = cf.get('POLICY', 'scope')
-    play_num = cf.getint('SELF_TRAIN', 'play_num')
-    test_num = cf.getint('SELF_TRAIN', 'test_num')
-    sample_num = cf.getint('SELF_TRAIN', 'sample_num')
-    test_steps = cf.getint('SELF_TRAIN', 'test_steps')
+    cf.read('config.ini', encoding="gb2312")
     background =  cf.get('THEME', 'background')
     blackstone = cf.get('THEME', 'blackstone')
     whitestone = cf.get('THEME', 'whitestone')
     blackbowls = cf.get('THEME', 'blackbowls')
     whitebowls = cf.get('THEME', 'whitebowls')
     lastmove = cf.get('THEME', 'lastmove')
+    server = cf.get('CGOS', 'server')
+    port9 = cf.getint('CGOS', 'port9')
+    port13 = cf.getint('CGOS', 'port13')
+    port19 = cf.getint('CGOS', 'port19')
+    username = cf.get('CGOS', 'username')
+    password = cf.get('CGOS', 'password')
+    engine_name = cf.get('CGOS', 'engine_name')
+    cgos_log = cf.get('CGOS', 'cgos_log')
+    log_level = cf.getint('COMMON', 'log_level')
+    file_log_level = cf.getint('COMMON', 'file_log_level')
+    max_changes = cf.getint('COMMON', 'max_changes')
+    sgf_dir = cf.get('COMMON', 'sgf_dir')
+    lz_dir = cf.get('COMMON', 'lz_dir')
+    board_size = cf.getint('COMMON', 'board_size')
+    show_stats = cf.getboolean('COMMON', 'show_stats')
 
     apps={}
-    namesstr = cf.get("APPS", "names")
-    names = namesstr.split(",")
-    for name in names:
-        cmd = cf.get("APPS", name)
-        apps[name] = cmd
+    lapps = cf["APPS"]
+    for name, app in lapps.items():
+        args = app.split(",")
+        args[0] = os.path.realpath(args[0])
+        app = ','.join(args)
+        apps[name] = app
+
+    logger = logging.getLogger("zigo")
+    logger.setLevel(min(log_level, file_log_level))
+    datefmt = '%m-%d %H:%M:%S'
+    fmt = '%(asctime)s [%(levelname)s]: %(message)s'
+    if file_log_level <= logging.DEBUG:
+        fmt = '%(asctime)s [%(levelname)s] at %(filename)s,%(lineno)d: %(message)s'
+    handler = logging.FileHandler("zigo.log", mode='w')   #Rotating, maxBytes=10*1024*1024,backupCount=3)
+    handler.setLevel(file_log_level)
+    formatter = logging.Formatter(fmt, datefmt)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    # Log info output to console
+    #handler = logging.StreamHandler(sys.stdout)
+    #handler.setLevel(config.log_level)
+    #formatter = logging.Formatter("%(asctime)s: %(message)s")
+    #handler.setFormatter(formatter)
+    #config.logger.addHandler(handler)
 
 def is_validate(content):        #如果你不加上==""的话，你就会发现删不完。总会剩下一个数字
     if content.isdigit() or (content==""):
@@ -113,7 +110,7 @@ def isfloat(s):
         return True
     return False
 
-
+'''
 class ConfigWindow():
     def __init__(self, wdpi, hdpi):
         self.top = Toplevel()
@@ -190,3 +187,4 @@ class ConfigWindow():
 
     def cancel(self):
         self.top.destroy()
+'''

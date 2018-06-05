@@ -1,15 +1,9 @@
-"""A ScrolledText widget feels like a text widget but also has a
-vertical scroll bar on its right.  (Later, options may be added to
-add a horizontal bar as well, to make the bars disappear
-automatically when not needed, to move them to the other side of the
-window, etc.)
-
-Configuration options are passed to the Text widget.
-A Frame widget is inserted between the master and the text, to hold
-the Scrollbar widget.
-Most methods calls are inherited from the Text widget; Pack, Grid and
-Place methods are redirected to the Frame widget however.
-"""
+#!/usr/bin/env python3
+#
+#    This file is part of ZiGo.
+#    Copyright (C) 2018 ZiGo
+#
+# -*- coding: utf-8 -*-
 
 __all__ = ['ScrollText']
 
@@ -46,9 +40,16 @@ class ScrollText(Text):
         return str(self.frame)
 
     def write(self, s):
-        self.get_values(s)
-        if self.values and self.qp:
-            self.qp.update_heatmap(self.values)
+        if s=="Analyse_Changed\n":
+            self.qp.update_heatmap(None)
+            return
+        elif s=="Values_Changed\n":
+            self.qp.update_winrate()
+            return
+        elif s=="New move\n":
+            self.qp.update_selfplay()
+            return
+        #self.get_values(s)
         self.insert(END, s)
         txt = self.get(0.0, END)
         if txt.count('\n') > 200:
@@ -68,14 +69,14 @@ class ScrollText(Text):
     def get_values(self, s):
         filtstr= r"\s*([A-Z]\d{1,2})\s\->\s+(\d+)\s*\(V:\s*([\d\.]+)\%\)\s\(N:\s*[\d\.]+\%\)\sPV:\s(.+)\n"   #"(Playouts: \d+, Win: ([\d\.]+)\%, PV: ([A-Z]\d{1,2})[\s\n])"|
         m = re.match(filtstr, s)
-        fs1=r"all visits count: (\d+)\n"
-        m1 = re.match(fs1, s)
-        visitscount = 0
-        if m1:
-            self.values = {}
-            visitscount = int(m1.group(1))
+        #fs1=r"all visits count: (\d+)\n"
+        #m1 = re.match(fs1, s)
+        #visitscount = 0
+        #if m1:
+        #    self.values = {}
+        #    visitscount = int(m1.group(1))
         if m:
             move = go.get_coor_from_gtp(m.group(1))
-            data = go.AnalyseData(move, visitscount, int(m.group(2)), float(m.group(3)), m.group(4))
+            data = go.AnalyseData(move, 10, int(m.group(2)), float(m.group(3)), m.group(4))
             self.values[move] = data
         return self.values
